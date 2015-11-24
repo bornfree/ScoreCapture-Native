@@ -9,27 +9,13 @@
 using namespace cv;
 using namespace std;
 
-#define LOG_TAG "Activ NDK"
+#define LOG_TAG "CameraOMR NDK"
 #define LOGD(...) ((void)__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__))
 
-//#define TEMPLATE_HEIGHT 640
-//#define TEMPLATE_WIDTH  480
-
-//#define TEMPLATE_HEIGHT 531
-//#define TEMPLATE_WIDTH  410
-//#define SECTION1_LEFT   (int) (0.11707*TEMPLATE_WIDTH)
-//#define SECTION2_LEFT   (int) (0.59024*TEMPLATE_WIDTH)
-//#define SECTION1_TOP    (int) (0.25700*TEMPLATE_HEIGHT)
-//#define SECTION2_TOP    (int) (0.25700*TEMPLATE_HEIGHT)
-//#define SECTION_WIDTH   (int) (0.35853*TEMPLATE_WIDTH)
-//#define SECTION_HEIGHT  (int) (0.67420*TEMPLATE_HEIGHT)
 //#define SECTION_NUM_ANSWERS 10
 #define SECTION_OPTIONS 5
 
 extern "C"{
-
-	char answer_key_1[10] = {'A', 'B', 'C', 'D', 'E', 'A', 'B', 'C', 'D', 'E'};
-	char answer_key_2[10] = {'A', 'B', 'C', 'D', 'E', 'A', 'B', 'C', 'D', 'E'};
 
 	struct TemplateX // Dont interfere with template keyword
 	{
@@ -183,8 +169,8 @@ extern "C"{
 	{
 		LOGD("Key: %s Length: %d", answer_key, strlen(answer_key));
 		cv::SimpleBlobDetector::Params params;
-		params.filterByArea = true;
-		params.minArea = 200;
+		//params.filterByArea = true;
+		//params.minArea = 200;
 		params.filterByCircularity = true;
 		params.minCircularity = 0.4;
 		params.filterByInertia = true;
@@ -307,31 +293,30 @@ extern "C"{
 
 	bool hasPattern(Mat mat)
 	{
-		int patTop = 615, patBottom = 628, patLeft = 188, patRight = 300;
-		bool hasPatternValue = false;
+	  bool hasPatternValue = false;
+	  int pattern_square_size = 10;
+	  int mid_point = (int) mat.cols/2.0;
+	  String patternString = "";
 
-		Mat patternMat = mat(Rect(patLeft, patTop, patRight - patLeft, patBottom - patTop));
-		threshold(patternMat, patternMat, 127, 255, CV_THRESH_BINARY);
-		int width = patRight - patLeft;
-		int step = (int) (width*1.0/7);
+	  for(int i = -3*pattern_square_size; i < 3*pattern_square_size; i+=pattern_square_size)
+	  {
+		Mat square_area = mat(Rect(mid_point+i, mat.rows - pattern_square_size, pattern_square_size, pattern_square_size));
+		Mat square = square_area.clone();
+		threshold(square, square, 127, 255, CV_THRESH_BINARY);
+		int whites = countNonZero(square);
+		if(whites > (square.cols*square.rows - whites))
+		  patternString += "w";
+		else
+		  patternString += "b";
 
-		String patternString = "";
+	  }
 
-		for(int i = 0; i< width; i+= step)
-		{
-			  Mat t = patternMat(Rect(i, 0, step, patBottom - patTop));
-			  int whites = countNonZero(t);
-			  if(whites > (t.cols*t.rows - whites))
-				patternString += 'w';
-			  else
-				patternString += 'b';
-		}
+	  String goodPattern = "wbwbwb";
+	  //LOGD("Found pattern %s", patternString.c_str());
+	  if(goodPattern.compare(patternString) == 0)
+	    hasPatternValue = true;
 
-		String goodPattern = "wbwbwbw";
-		if(patternString == goodPattern)
-			hasPatternValue = true;
-
-		return hasPatternValue;
+	  return hasPatternValue;
 	}
 
 	JNIEXPORT void JNICALL Java_com_cameraomr_android_CameraActivity_setTemplateProperties(JNIEnv* env, jobject, jint template_width, jint template_height)
@@ -395,8 +380,11 @@ extern "C"{
 		  Mat result = perspective_correct(mGray);
 		  //if(debugIndex == 1)
 		  mGray = result;
-		  if(!hasPattern(mGray))
+		  if(!hasPattern(result))
+		  {
+			  LOGD("No pattern found");
 			  return -1;
+		  }
 
 
 		  for(int i=0; i < main_sections.size(); i++)
